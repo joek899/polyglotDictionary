@@ -1,0 +1,210 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Polyglot Dictionary</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col">
+  <header class="bg-blue-600 text-white p-4">
+    <h1 class="text-2xl font-bold">Polyglot Dictionary</h1>
+    <p class="text-sm">Contribute to and explore words in any language!</p>
+  </header>
+
+  <main class="container mx-auto p-4 flex-grow">
+    <!-- Add New Word -->
+    <section class="mb-8 bg-white p-6 rounded-lg shadow">
+      <h2 class="text-xl font-semibold mb-4">Add a New Word</h2>
+      <form id="addWordForm" class="space-y-4">
+        <div>
+          <label for="language" class="block text-sm font-medium">Language</label>
+          <select id="language" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm" required>
+            <option value="">Select a language</option>
+            <!-- Populated dynamically -->
+          </select>
+        </div>
+        <div>
+          <label for="word" class="block text-sm font-medium">Word</label>
+          <input type="text" id="word" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm" required>
+        </div>
+        <div>
+          <label for="meaning" class="block text-sm font-medium">Meaning</label>
+          <textarea id="meaning" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm" required></textarea>
+        </div>
+        <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Add Word</button>
+      </form>
+    </section>
+
+    <!-- Propose New Language -->
+    <section class="mb-8 bg-white p-6 rounded-lg shadow">
+      <h2 class="text-xl font-semibold mb-4">Propose a New Language</h2>
+      <form id="addLanguageForm" class="space-y-4">
+        <div>
+          <label for="newLanguage" class="block text-sm font-medium">Language Name</label>
+          <input type="text" id="newLanguage" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm" required>
+        </div>
+        <div>
+          <label for="description" class="block text-sm font-medium">Description</label>
+          <textarea id="description" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm" required></textarea>
+        </div>
+        <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700">Propose Language</button>
+      </form>
+    </section>
+
+    <!-- Search Dictionary -->
+    <section class="mb-8 bg-white p-6 rounded-lg shadow">
+      <h2 class="text-xl font-semibold mb-4">Search Dictionary</h2>
+      <form id="searchForm" class="space-y-4">
+        <div>
+          <label for="searchLanguage" class="block text-sm font-medium">Language (Optional)</label>
+          <select id="searchLanguage" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
+            <option value="">All languages</option>
+            <!-- Populated dynamically -->
+          </select>
+        </div>
+        <div>
+          <label for="searchWord" class="block text-sm font-medium">Word</label>
+          <input type="text" id="searchWord" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm" required>
+        </div>
+        <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Search</button>
+      </form>
+      <div id="searchResults" class="mt-4"></div>
+    </section>
+  </main>
+
+  <footer class="bg-gray-800 text-white p-4 text-center">
+    <p>&copy; 2025 Polyglot Dictionary. Open-source under MIT License.</p>
+    <p><a href="https://github.com/polyglot-dictionary" class="underline">Contribute on GitHub</a></p>
+  </footer>
+
+  <script>
+    // Client-side JavaScript
+    document.addEventListener('DOMContentLoaded', () => {
+      // Fetch languages for dropdowns
+      async function loadLanguages() {
+        const response = await fetch('/api/languages');
+        const languages = await response.json();
+        const languageSelect = document.getElementById('language');
+        const searchLanguageSelect = document.getElementById('searchLanguage');
+        
+        languages.forEach(lang => {
+          const option = document.createElement('option');
+          option.value = lang.name;
+          option.textContent = lang.name;
+          languageSelect.appendChild(option);
+          searchLanguageSelect.appendChild(option.cloneNode(true));
+        });
+      }
+
+      // Add word
+      document.getElementById('addWordForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const language = document.getElementById('language').value;
+        const word = document.getElementById('word').value;
+        const meaning = document.getElementById('meaning').value;
+
+        const response = await fetch('/api/words', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ language, word, meaning })
+        });
+
+        if (response.ok) {
+          alert('Word added successfully!');
+          e.target.reset();
+        } else {
+          alert('Error adding word.');
+        }
+      });
+
+      // Propose new language
+      document.getElementById('addLanguageForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const name = document.getElementById('newLanguage').value;
+        const description = document.getElementById('description').value;
+
+        const response = await fetch('/api/languages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, description })
+        });
+
+        if (response.ok) {
+          alert('Language proposed successfully!');
+          e.target.reset();
+          loadLanguages(); // Refresh language dropdowns
+        } else {
+          alert('Error proposing language.');
+        }
+      });
+
+      // Search dictionary
+      document.getElementById('searchForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const language = document.getElementById('searchLanguage').value;
+        const word = document.getElementById('searchWord').value;
+        
+        const response = await fetch(`/api/words?word=${encodeURIComponent(word)}${language ? `&language=${encodeURIComponent(language)}` : ''}`);
+        const results = await response.json();
+        const resultsDiv = document.getElementById('searchResults');
+
+        if (results.length === 0) {
+          resultsDiv.innerHTML = '<p>No results found.</p>';
+          return;
+        }
+
+        resultsDiv.innerHTML = results.map(item => `
+          <div class="p-4 bg-gray-50 rounded-md mb-2">
+            <p><strong>Language:</strong> ${item.language}</p>
+            <p><strong>Word:</strong> ${item.word}</p>
+            <p><strong>Meaning:</strong> ${item.meaning}</p>
+          </div>
+        `).join('');
+      });
+
+      // Load languages on page load
+      loadLanguages();
+    });
+  </script>
+</body>
+</html>
